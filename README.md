@@ -77,37 +77,57 @@ Google CalendarとObsidianを同期するプラグインです。デイリーノ
 このプラグインは **`styles.css`** で以下のスタイルを適用します：
 
 ```css
-/* Obsidian コメント（%%...%%）を完全非表示 */
-.cm-comment {
+/* gcal-sync クラスが指定されたノートのみコメントを非表示 */
+.gcal-sync .cm-comment {
     display: none !important;
 }
 
 /* マーカー行全体を非表示 */
-.cm-line:has(.cm-comment) {
+.gcal-sync .cm-line:has(.cm-comment) {
     display: none !important;
 }
 ```
 
 **影響範囲:**
-- **全ての Obsidian ノート**で `%%...%%` 形式のコメントが非表示になります
-- 他のノートで `%%メモ%%` などを使っている場合、それも見えなくなります
-- 必要に応じて `styles.css` を編集してスコープを限定してください
+- **`cssclasses: gcal-sync` が指定されたノートのみ**で `%%...%%` 形式のコメントが非表示になります
+- デイリーノートのテンプレートに `cssclasses: gcal-sync` を含めることで、デイリーノートだけに適用されます
+- 他のノートには一切影響しません
 
-**スコープを限定する例（デイリーノートのみ）:**
-```css
-body:has(.tag[data-tag-name="#Daily"]) .cm-comment {
-    display: none !important;
-}
+**テンプレートの設定例:**
+```markdown
+---
+cssclasses: gcal-sync
+---
+
+### Schedule
+<%* await app.commands.executeCommandById('obsidian-gcal-sync:insert-today-events'); '' %>
+%%start%%
+%%end%%
+```
+
+## 表示例
+
+**テンプレートについて:**
+テンプレートファイル自体でマーカーを表示させたい場合は、Templater を使用して動的に `cssclasses` を追加することをおすすめします：
+
+```markdown
+---
+<%* if (!tp.file.path(true).includes("Templates")) { %>cssclasses: gcal-sync<%* } %>
+---
 ```
 
 ## 表示例
 
 ```markdown
 ### Schedule
-- All-day event ※リボ調整
-- All-day event 古賀苗さんの誕生日
-- All-day event 岩井大信さんの誕生日
+- 09:00 - 10:00 チーム定例ミーティング
+- 12:00 - 13:00 ランチ with 田中さん
+- All-day event 祝日：海の日
+- 15:00 - 16:30 プロジェクトレビュー
+    - 場所: 会議室A
+    - メモ: 資料を準備すること
 ```
+
 
 - マーカー（`%%start%%` / `%%end%%`）は表示されません
 - 普通の箇条書きリストとして表示されます
