@@ -8,12 +8,9 @@ interface GcalSyncSettings {
     googleAccessToken: string;
     googleRefreshToken: string;
     enabledForDailyNotes: boolean;
-    insertPosition: 'top' | 'bottom' | 'heading';
-    headingText: string;
     autoRefresh: boolean;
     refreshInterval: number; // 秒単位
     calendarIds: string[]; // 表示するカレンダーIDのリスト
-    insertMargin: number; // 挿入時のマージン（行数）
 }
 
 // デフォルト設定
@@ -23,12 +20,9 @@ const DEFAULT_SETTINGS: GcalSyncSettings = {
     googleAccessToken: '',
     googleRefreshToken: '',
     enabledForDailyNotes: true,
-    insertPosition: 'heading',
-    headingText: '## 📅 今日の予定',
     autoRefresh: true,
     refreshInterval: 60,
     calendarIds: ['primary'], // デフォルトはメインカレンダー
-    insertMargin: 0 // デフォルトは0行（直下）
 };
 
 // カレンダーイベントの型
@@ -137,7 +131,9 @@ export default class GcalSyncPlugin extends Plugin {
 
     // 今日の予定を挿入
     async insertTodayEvents() {
+        console.log('=== insertTodayEvents 開始 ===');
         if (!this.settings.googleAccessToken) {
+            console.log('エラー: Google認証が必要です');
             new Notice('先にGoogleアカウントで認証してください');
             return;
         }
@@ -146,17 +142,28 @@ export default class GcalSyncPlugin extends Plugin {
             // アクティブファイルから日付を取得
             const activeFile = this.app.workspace.getActiveFile();
             if (!activeFile) {
+                console.log('エラー: アクティブファイルがありません');
                 return;
             }
+            console.log('アクティブファイル:', activeFile.path);
 
             const targetDate = this.getDateFromFileName(activeFile.basename);
+            console.log('ファイル名から取得した日付:', targetDate);
             if (!targetDate) {
+                console.log('エラー: ファイル名から日付を取得できませんでした');
                 new Notice('ファイル名から日付を取得できませんでした');
                 return;
             }
 
+            console.log('イベント取得開始:', targetDate);
             const events = await this.fetchEventsForDate(targetDate);
+            console.log('取得したイベント数:', events.length);
+            console.log('イベント詳細:', events);
+
             const formattedEvents = this.formatEvents(events);
+            console.log('フォーマット済みイベント:', formattedEvents);
+            console.log('フォーマット済みイベントの長さ:', formattedEvents.length);
+
             await this.insertToActiveFile(formattedEvents);
         } catch (error) {
             console.error('予定の取得に失敗:', error);
@@ -366,89 +373,82 @@ export default class GcalSyncPlugin extends Plugin {
 
     // アクティブファイルに挿入
     async insertToActiveFile(content: string) {
+        console.log('=== insertToActiveFile 呼び出し ===');
+        console.log('受け取った content:', content);
+        console.log('content の長さ:', content.length);
+
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) {
+            console.log('エラー: アクティブなファイルがありません');
             new Notice('アクティブなファイルがありません');
             return;
         }
+        console.log('アクティブファイル:', activeFile.path);
 
         const currentContent = await this.app.vault.read(activeFile);
+        console.log('現在のノート内容 (先頭200文字):', currentContent.slice(0, 200));
 
-        let newContent: string;
+        // ### Schedule 見出しを探す
+        const scheduleHeadingPattern = /^###\s+Schedule\s*$/m;
+        const scheduleMatch = currentContent.match(scheduleHeadingPattern);
 
-        if (this.settings.insertPosition === 'heading') {
-            // 指定した見出しの下に挿入
-            // 見出しマークダウン(###)を含むかチェック
-            const headingText = this.settings.headingText.trim();
-            let headingPattern: RegExp;
-
-            if (headingText.startsWith('#')) {
-                // 見出しマークダウンがある場合、そのまま検索
-                const escapedHeading = headingText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                headingPattern = new RegExp(`^${escapedHeading}\\s*$`, 'm');
-            } else {
-                // 見出しマークダウンがない場合、任意の見出しレベルで検索
-                const escapedHeading = headingText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                headingPattern = new RegExp(`^#{1,6}\\s+${escapedHeading}\\s*$`, 'm');
-            }
-
-            const match = currentContent.match(headingPattern);
-
-            if (match && match.index !== undefined) {
-                // 見出しが見つかった場合
-                const headingEnd = match.index + match[0].length;
-                const afterHeading = currentContent.slice(headingEnd);
-
-                // 見出しの直後からリスト項目が続く限り削除
-                const lines = afterHeading.split('\n');
-                let deleteLineCount = 0;
-
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    const trimmed = line.trim();
-
-                    // リスト項目ならカウント
-                    if (trimmed.startsWith('- ') || line.startsWith('\t- ')) {
-                        deleteLineCount++;
-                    } else if (trimmed === '') {
-                        // 空行はスキップ(次の行もチェック)
-                        deleteLineCount++;
-                    } else {
-                        // リスト以外が来たら終了
-                        break;
-                    }
-                }
-
-                // 削除する範囲を計算
-                let deleteEndPos = headingEnd;
-                for (let i = 0; i < deleteLineCount; i++) {
-                    const nextNewline = currentContent.indexOf('\n', deleteEndPos);
-                    if (nextNewline === -1) {
-                        deleteEndPos = currentContent.length;
-                        break;
-                    }
-                    deleteEndPos = nextNewline + 1;
-                }
-
-                // マージンを計算 (最低1個の改行)
-                const margin = '\n'.repeat(this.settings.insertMargin + 1);
-                const trimmedContent = content.trim();
-
-                // 新しいコンテンツを組み立て (最後に改行を追加)
-                newContent = currentContent.slice(0, headingEnd) + margin + trimmedContent + '\n' + currentContent.slice(deleteEndPos);
-
-            } else {
-                // 見出しが見つからない場合、先頭に見出しごと挿入
-                new Notice(`見出し「${headingText}」が見つかりませんでした。先頭に挿入します。`);
-                newContent = content + '\n\n' + currentContent;
-            }
-        } else if (this.settings.insertPosition === 'top') {
-            newContent = content + '\n\n' + currentContent;
-        } else {
-            newContent = currentContent + '\n\n' + content;
+        if (!scheduleMatch || scheduleMatch.index === undefined) {
+            console.log('エラー: ### Schedule 見出しが見つかりません');
+            return;
         }
 
+        const scheduleHeadingEnd = scheduleMatch.index + scheduleMatch[0].length;
+        console.log('### Schedule 見出しの位置:', scheduleMatch.index);
+
+        // Schedule 見出しの後ろから次の見出し（### で始まる行）までを抽出
+        const afterSchedule = currentContent.slice(scheduleHeadingEnd);
+        const nextHeadingMatch = afterSchedule.match(/^###\s+/m);
+        const searchEnd = nextHeadingMatch?.index !== undefined
+            ? scheduleHeadingEnd + nextHeadingMatch.index
+            : currentContent.length;
+
+        console.log('Schedule セクションの範囲:', { start: scheduleHeadingEnd, end: searchEnd });
+
+        // Schedule セクション内でマーカーを探す
+        const scheduleSection = currentContent.slice(scheduleHeadingEnd, searchEnd);
+        const startMarker = '%%start%%';
+        const endMarker = '%%end%%';
+
+        const startIdx = scheduleSection.indexOf(startMarker);
+        const endIdx = scheduleSection.indexOf(endMarker);
+
+        console.log('Schedule セクション内のマーカー位置:', { startIdx, endIdx });
+
+        if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
+            console.log('エラー: Schedule セクション内にマーカーが見つからないか順序が不正');
+            console.log('startMarker が見つかった:', startIdx !== -1);
+            console.log('endMarker が見つかった:', endIdx !== -1);
+            return;
+        }
+
+        // 絶対位置に変換
+        const absoluteStartIdx = scheduleHeadingEnd + startIdx;
+        const absoluteEndIdx = scheduleHeadingEnd + endIdx;
+
+        const afterStart = absoluteStartIdx + startMarker.length;
+        const beforeEnd = absoluteEndIdx;
+        const before = currentContent.slice(0, afterStart);
+        const after = currentContent.slice(beforeEnd);
+        const trimmed = content.trim();
+
+        console.log('trimmed content:', trimmed);
+        console.log('trimmed の長さ:', trimmed.length);
+
+        if (!trimmed) {
+            console.log('警告: content が空なので何もしない');
+            return;
+        }
+
+        // イベントをそのまま挿入（マーカーは残す）
+        const newContent = `${before}\n${trimmed}\n${after}`;
+        console.log('新しい内容を書き込み中...');
         await this.app.vault.modify(activeFile, newContent);
+        console.log('✅ 書き込み完了');
     }
 
     // Google OAuth認証
@@ -662,47 +662,6 @@ class GcalSyncSettingTab extends PluginSettingTab {
                 }));
 
 
-        // デイリーノート自動挿入
-        new Setting(containerEl)
-            .setName('デイリーノート自動挿入')
-            .setDesc('デイリーノートを開いた時に自動で予定を挿入')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enabledForDailyNotes)
-                .onChange(async (value) => {
-                    this.plugin.settings.enabledForDailyNotes = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        // 挿入位置
-        new Setting(containerEl)
-            .setName('挿入位置')
-            .setDesc('予定を挿入する位置')
-            .addDropdown(dropdown => dropdown
-                .addOption('heading', '指定した見出しの下')
-                .addOption('top', 'ファイルの先頭')
-                .addOption('bottom', 'ファイルの末尾')
-                .setValue(this.plugin.settings.insertPosition)
-                .onChange(async (value: 'top' | 'bottom' | 'heading') => {
-                    this.plugin.settings.insertPosition = value;
-                    await this.plugin.saveSettings();
-                    // 設定画面を再描画
-                    this.display();
-                }));
-
-        // 見出しテキスト(挿入位置が「見出しの下」の場合のみ表示)
-        if (this.plugin.settings.insertPosition === 'heading') {
-            new Setting(containerEl)
-                .setName('見出しテキスト')
-                .setDesc('予定を挿入する見出し(例: ## 📅 今日の予定)')
-                .addText(text => text
-                    .setPlaceholder('## 📅 今日の予定')
-                    .setValue(this.plugin.settings.headingText)
-                    .onChange(async (value) => {
-                        this.plugin.settings.headingText = value;
-                        await this.plugin.saveSettings();
-                    }));
-        }
-
         // カレンダーID設定
         new Setting(containerEl)
             .setName('表示するカレンダー')
@@ -719,22 +678,19 @@ class GcalSyncSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // 挿入マージン設定
+
+        // デイリーノート自動挿入
         new Setting(containerEl)
-            .setName('挿入マージン')
-            .setDesc('見出しの下に挿入する際の追加空行数 (0=最小限, 1=1行追加, 2=2行追加)')
-            .addText(text => text
-                .setPlaceholder('0')
-                .setValue(String(this.plugin.settings.insertMargin))
+            .setName('デイリーノート自動挿入')
+            .setDesc('デイリーノートを開いた時に自動で予定を挿入')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enabledForDailyNotes)
                 .onChange(async (value) => {
-                    const margin = parseInt(value);
-                    if (!isNaN(margin) && margin >= 0) {
-                        this.plugin.settings.insertMargin = margin;
-                        await this.plugin.saveSettings();
-                    }
+                    this.plugin.settings.enabledForDailyNotes = value;
+                    await this.plugin.saveSettings();
                 }));
 
-        // 自動リフレッシュ設定
+        // 自動リフレッシュ設定は残すだけにします
         new Setting(containerEl)
             .setName('自動リフレッシュ')
             .setDesc('デイリーノートを開いている間、定期的に予定を更新')
@@ -745,7 +701,7 @@ class GcalSyncSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // リフレッシュ間隔
+        // リフレッシュ間隔設定
         if (this.plugin.settings.autoRefresh) {
             new Setting(containerEl)
                 .setName('リフレッシュ間隔')

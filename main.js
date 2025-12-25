@@ -29,14 +29,10 @@ var DEFAULT_SETTINGS = {
   googleAccessToken: "",
   googleRefreshToken: "",
   enabledForDailyNotes: true,
-  insertPosition: "heading",
-  headingText: "## \u{1F4C5} \u4ECA\u65E5\u306E\u4E88\u5B9A",
   autoRefresh: true,
   refreshInterval: 60,
-  calendarIds: ["primary"],
+  calendarIds: ["primary"]
   // デフォルトはメインカレンダー
-  insertMargin: 0
-  // デフォルトは0行（直下）
 };
 var GcalSyncPlugin = class extends import_obsidian.Plugin {
   constructor() {
@@ -113,22 +109,33 @@ var GcalSyncPlugin = class extends import_obsidian.Plugin {
   }
   // 今日の予定を挿入
   async insertTodayEvents() {
+    console.log("=== insertTodayEvents \u958B\u59CB ===");
     if (!this.settings.googleAccessToken) {
+      console.log("\u30A8\u30E9\u30FC: Google\u8A8D\u8A3C\u304C\u5FC5\u8981\u3067\u3059");
       new import_obsidian.Notice("\u5148\u306BGoogle\u30A2\u30AB\u30A6\u30F3\u30C8\u3067\u8A8D\u8A3C\u3057\u3066\u304F\u3060\u3055\u3044");
       return;
     }
     try {
       const activeFile = this.app.workspace.getActiveFile();
       if (!activeFile) {
+        console.log("\u30A8\u30E9\u30FC: \u30A2\u30AF\u30C6\u30A3\u30D6\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u305B\u3093");
         return;
       }
+      console.log("\u30A2\u30AF\u30C6\u30A3\u30D6\u30D5\u30A1\u30A4\u30EB:", activeFile.path);
       const targetDate = this.getDateFromFileName(activeFile.basename);
+      console.log("\u30D5\u30A1\u30A4\u30EB\u540D\u304B\u3089\u53D6\u5F97\u3057\u305F\u65E5\u4ED8:", targetDate);
       if (!targetDate) {
+        console.log("\u30A8\u30E9\u30FC: \u30D5\u30A1\u30A4\u30EB\u540D\u304B\u3089\u65E5\u4ED8\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F");
         new import_obsidian.Notice("\u30D5\u30A1\u30A4\u30EB\u540D\u304B\u3089\u65E5\u4ED8\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F");
         return;
       }
+      console.log("\u30A4\u30D9\u30F3\u30C8\u53D6\u5F97\u958B\u59CB:", targetDate);
       const events = await this.fetchEventsForDate(targetDate);
+      console.log("\u53D6\u5F97\u3057\u305F\u30A4\u30D9\u30F3\u30C8\u6570:", events.length);
+      console.log("\u30A4\u30D9\u30F3\u30C8\u8A73\u7D30:", events);
       const formattedEvents = this.formatEvents(events);
+      console.log("\u30D5\u30A9\u30FC\u30DE\u30C3\u30C8\u6E08\u307F\u30A4\u30D9\u30F3\u30C8:", formattedEvents);
+      console.log("\u30D5\u30A9\u30FC\u30DE\u30C3\u30C8\u6E08\u307F\u30A4\u30D9\u30F3\u30C8\u306E\u9577\u3055:", formattedEvents.length);
       await this.insertToActiveFile(formattedEvents);
     } catch (error) {
       console.error("\u4E88\u5B9A\u306E\u53D6\u5F97\u306B\u5931\u6557:", error);
@@ -299,62 +306,61 @@ var GcalSyncPlugin = class extends import_obsidian.Plugin {
   }
   // アクティブファイルに挿入
   async insertToActiveFile(content) {
+    console.log("=== insertToActiveFile \u547C\u3073\u51FA\u3057 ===");
+    console.log("\u53D7\u3051\u53D6\u3063\u305F content:", content);
+    console.log("content \u306E\u9577\u3055:", content.length);
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
+      console.log("\u30A8\u30E9\u30FC: \u30A2\u30AF\u30C6\u30A3\u30D6\u306A\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u305B\u3093");
       new import_obsidian.Notice("\u30A2\u30AF\u30C6\u30A3\u30D6\u306A\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u305B\u3093");
       return;
     }
+    console.log("\u30A2\u30AF\u30C6\u30A3\u30D6\u30D5\u30A1\u30A4\u30EB:", activeFile.path);
     const currentContent = await this.app.vault.read(activeFile);
-    let newContent;
-    if (this.settings.insertPosition === "heading") {
-      const headingText = this.settings.headingText.trim();
-      let headingPattern;
-      if (headingText.startsWith("#")) {
-        const escapedHeading = headingText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        headingPattern = new RegExp(`^${escapedHeading}\\s*$`, "m");
-      } else {
-        const escapedHeading = headingText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        headingPattern = new RegExp(`^#{1,6}\\s+${escapedHeading}\\s*$`, "m");
-      }
-      const match = currentContent.match(headingPattern);
-      if (match && match.index !== void 0) {
-        const headingEnd = match.index + match[0].length;
-        const afterHeading = currentContent.slice(headingEnd);
-        const lines = afterHeading.split("\n");
-        let deleteLineCount = 0;
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          const trimmed = line.trim();
-          if (trimmed.startsWith("- ") || line.startsWith("	- ")) {
-            deleteLineCount++;
-          } else if (trimmed === "") {
-            deleteLineCount++;
-          } else {
-            break;
-          }
-        }
-        let deleteEndPos = headingEnd;
-        for (let i = 0; i < deleteLineCount; i++) {
-          const nextNewline = currentContent.indexOf("\n", deleteEndPos);
-          if (nextNewline === -1) {
-            deleteEndPos = currentContent.length;
-            break;
-          }
-          deleteEndPos = nextNewline + 1;
-        }
-        const margin = "\n".repeat(this.settings.insertMargin + 1);
-        const trimmedContent = content.trim();
-        newContent = currentContent.slice(0, headingEnd) + margin + trimmedContent + "\n" + currentContent.slice(deleteEndPos);
-      } else {
-        new import_obsidian.Notice(`\u898B\u51FA\u3057\u300C${headingText}\u300D\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u5148\u982D\u306B\u633F\u5165\u3057\u307E\u3059\u3002`);
-        newContent = content + "\n\n" + currentContent;
-      }
-    } else if (this.settings.insertPosition === "top") {
-      newContent = content + "\n\n" + currentContent;
-    } else {
-      newContent = currentContent + "\n\n" + content;
+    console.log("\u73FE\u5728\u306E\u30CE\u30FC\u30C8\u5185\u5BB9 (\u5148\u982D200\u6587\u5B57):", currentContent.slice(0, 200));
+    const scheduleHeadingPattern = /^###\s+Schedule\s*$/m;
+    const scheduleMatch = currentContent.match(scheduleHeadingPattern);
+    if (!scheduleMatch || scheduleMatch.index === void 0) {
+      console.log("\u30A8\u30E9\u30FC: ### Schedule \u898B\u51FA\u3057\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093");
+      return;
     }
+    const scheduleHeadingEnd = scheduleMatch.index + scheduleMatch[0].length;
+    console.log("### Schedule \u898B\u51FA\u3057\u306E\u4F4D\u7F6E:", scheduleMatch.index);
+    const afterSchedule = currentContent.slice(scheduleHeadingEnd);
+    const nextHeadingMatch = afterSchedule.match(/^###\s+/m);
+    const searchEnd = (nextHeadingMatch == null ? void 0 : nextHeadingMatch.index) !== void 0 ? scheduleHeadingEnd + nextHeadingMatch.index : currentContent.length;
+    console.log("Schedule \u30BB\u30AF\u30B7\u30E7\u30F3\u306E\u7BC4\u56F2:", { start: scheduleHeadingEnd, end: searchEnd });
+    const scheduleSection = currentContent.slice(scheduleHeadingEnd, searchEnd);
+    const startMarker = "%%start%%";
+    const endMarker = "%%end%%";
+    const startIdx = scheduleSection.indexOf(startMarker);
+    const endIdx = scheduleSection.indexOf(endMarker);
+    console.log("Schedule \u30BB\u30AF\u30B7\u30E7\u30F3\u5185\u306E\u30DE\u30FC\u30AB\u30FC\u4F4D\u7F6E:", { startIdx, endIdx });
+    if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
+      console.log("\u30A8\u30E9\u30FC: Schedule \u30BB\u30AF\u30B7\u30E7\u30F3\u5185\u306B\u30DE\u30FC\u30AB\u30FC\u304C\u898B\u3064\u304B\u3089\u306A\u3044\u304B\u9806\u5E8F\u304C\u4E0D\u6B63");
+      console.log("startMarker \u304C\u898B\u3064\u304B\u3063\u305F:", startIdx !== -1);
+      console.log("endMarker \u304C\u898B\u3064\u304B\u3063\u305F:", endIdx !== -1);
+      return;
+    }
+    const absoluteStartIdx = scheduleHeadingEnd + startIdx;
+    const absoluteEndIdx = scheduleHeadingEnd + endIdx;
+    const afterStart = absoluteStartIdx + startMarker.length;
+    const beforeEnd = absoluteEndIdx;
+    const before = currentContent.slice(0, afterStart);
+    const after = currentContent.slice(beforeEnd);
+    const trimmed = content.trim();
+    console.log("trimmed content:", trimmed);
+    console.log("trimmed \u306E\u9577\u3055:", trimmed.length);
+    if (!trimmed) {
+      console.log("\u8B66\u544A: content \u304C\u7A7A\u306A\u306E\u3067\u4F55\u3082\u3057\u306A\u3044");
+      return;
+    }
+    const newContent = `${before}
+${trimmed}
+${after}`;
+    console.log("\u65B0\u3057\u3044\u5185\u5BB9\u3092\u66F8\u304D\u8FBC\u307F\u4E2D...");
     await this.app.vault.modify(activeFile, newContent);
+    console.log("\u2705 \u66F8\u304D\u8FBC\u307F\u5B8C\u4E86");
   }
   // Google OAuth認証
   async authenticate() {
@@ -498,31 +504,13 @@ var GcalSyncSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("Google\u8A8D\u8A3C").setDesc(isAuthorized ? "\u2705 \u8A8D\u8A3C\u6E08\u307F - Google\u30AB\u30EC\u30F3\u30C0\u30FC\u306B\u30A2\u30AF\u30BB\u30B9\u3067\u304D\u307E\u3059" : "\u274C \u672A\u8A8D\u8A3C - Google\u30A2\u30AB\u30A6\u30F3\u30C8\u3067\u8A8D\u8A3C\u3057\u3066\u30AB\u30EC\u30F3\u30C0\u30FC\u306B\u30A2\u30AF\u30BB\u30B9").addButton((button) => button.setButtonText(isAuthorized ? "\u518D\u8A8D\u8A3C" : "\u8A8D\u8A3C\u3059\u308B").setCta().onClick(() => {
       this.plugin.authenticate();
     }));
-    new import_obsidian.Setting(containerEl).setName("\u30C7\u30A4\u30EA\u30FC\u30CE\u30FC\u30C8\u81EA\u52D5\u633F\u5165").setDesc("\u30C7\u30A4\u30EA\u30FC\u30CE\u30FC\u30C8\u3092\u958B\u3044\u305F\u6642\u306B\u81EA\u52D5\u3067\u4E88\u5B9A\u3092\u633F\u5165").addToggle((toggle) => toggle.setValue(this.plugin.settings.enabledForDailyNotes).onChange(async (value) => {
-      this.plugin.settings.enabledForDailyNotes = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("\u633F\u5165\u4F4D\u7F6E").setDesc("\u4E88\u5B9A\u3092\u633F\u5165\u3059\u308B\u4F4D\u7F6E").addDropdown((dropdown) => dropdown.addOption("heading", "\u6307\u5B9A\u3057\u305F\u898B\u51FA\u3057\u306E\u4E0B").addOption("top", "\u30D5\u30A1\u30A4\u30EB\u306E\u5148\u982D").addOption("bottom", "\u30D5\u30A1\u30A4\u30EB\u306E\u672B\u5C3E").setValue(this.plugin.settings.insertPosition).onChange(async (value) => {
-      this.plugin.settings.insertPosition = value;
-      await this.plugin.saveSettings();
-      this.display();
-    }));
-    if (this.plugin.settings.insertPosition === "heading") {
-      new import_obsidian.Setting(containerEl).setName("\u898B\u51FA\u3057\u30C6\u30AD\u30B9\u30C8").setDesc("\u4E88\u5B9A\u3092\u633F\u5165\u3059\u308B\u898B\u51FA\u3057(\u4F8B: ## \u{1F4C5} \u4ECA\u65E5\u306E\u4E88\u5B9A)").addText((text) => text.setPlaceholder("## \u{1F4C5} \u4ECA\u65E5\u306E\u4E88\u5B9A").setValue(this.plugin.settings.headingText).onChange(async (value) => {
-        this.plugin.settings.headingText = value;
-        await this.plugin.saveSettings();
-      }));
-    }
     new import_obsidian.Setting(containerEl).setName("\u8868\u793A\u3059\u308B\u30AB\u30EC\u30F3\u30C0\u30FC").setDesc("\u30AB\u30EC\u30F3\u30C0\u30FCID\u3092\u30AB\u30F3\u30DE\u533A\u5207\u308A\u3067\u5165\u529B (\u4F8B: primary, work@example.com, private@example.com)").addTextArea((text) => text.setPlaceholder("primary").setValue(this.plugin.settings.calendarIds.join(", ")).onChange(async (value) => {
       this.plugin.settings.calendarIds = value.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
       await this.plugin.saveSettings();
     }));
-    new import_obsidian.Setting(containerEl).setName("\u633F\u5165\u30DE\u30FC\u30B8\u30F3").setDesc("\u898B\u51FA\u3057\u306E\u4E0B\u306B\u633F\u5165\u3059\u308B\u969B\u306E\u8FFD\u52A0\u7A7A\u884C\u6570 (0=\u6700\u5C0F\u9650, 1=1\u884C\u8FFD\u52A0, 2=2\u884C\u8FFD\u52A0)").addText((text) => text.setPlaceholder("0").setValue(String(this.plugin.settings.insertMargin)).onChange(async (value) => {
-      const margin = parseInt(value);
-      if (!isNaN(margin) && margin >= 0) {
-        this.plugin.settings.insertMargin = margin;
-        await this.plugin.saveSettings();
-      }
+    new import_obsidian.Setting(containerEl).setName("\u30C7\u30A4\u30EA\u30FC\u30CE\u30FC\u30C8\u81EA\u52D5\u633F\u5165").setDesc("\u30C7\u30A4\u30EA\u30FC\u30CE\u30FC\u30C8\u3092\u958B\u3044\u305F\u6642\u306B\u81EA\u52D5\u3067\u4E88\u5B9A\u3092\u633F\u5165").addToggle((toggle) => toggle.setValue(this.plugin.settings.enabledForDailyNotes).onChange(async (value) => {
+      this.plugin.settings.enabledForDailyNotes = value;
+      await this.plugin.saveSettings();
     }));
     new import_obsidian.Setting(containerEl).setName("\u81EA\u52D5\u30EA\u30D5\u30EC\u30C3\u30B7\u30E5").setDesc("\u30C7\u30A4\u30EA\u30FC\u30CE\u30FC\u30C8\u3092\u958B\u3044\u3066\u3044\u308B\u9593\u3001\u5B9A\u671F\u7684\u306B\u4E88\u5B9A\u3092\u66F4\u65B0").addToggle((toggle) => toggle.setValue(this.plugin.settings.autoRefresh).onChange(async (value) => {
       this.plugin.settings.autoRefresh = value;

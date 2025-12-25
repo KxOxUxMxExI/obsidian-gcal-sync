@@ -46,3 +46,29 @@ a.internal-link:hover {
     color: var(--text-normal) !important;
     text-decoration: underline !important;
 }
+
+/* Obsidian コメント（%%...%%）を完全非表示 */
+.cm-comment {
+    display: none !important;
+}
+
+/* マーカー行全体を非表示 */
+.cm-line:has(.cm-comment) {
+    display: none !important;
+    height: 0 !important;
+    line-height: 0 !important;
+}
+
+/* 引用ブロックの左線を完全に透明 */
+.markdown-preview-view blockquote,
+.markdown-rendered blockquote,
+.cm-line.HyperMD-quote {
+    border-left: 0px solid transparent !important;
+    padding-left: 0px !important;
+    margin-left: 0px !important;
+}
+
+/* 編集モードの引用記号（>）を完全非表示 */
+.cm-formatting-quote {
+    display: none !important;
+}
