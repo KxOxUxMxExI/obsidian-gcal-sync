@@ -1,0 +1,48 @@
+/* Gcal Sync for Obsidian スタイル */
+
+/* 設定画面のスタイル */
+.gcal-sync-settings {
+    padding: 20px;
+}
+
+.gcal-sync-settings .setting-item {
+    margin-bottom: 20px;
+}
+
+.gcal-sync-auth-button {
+    margin-top: 10px;
+}
+
+/* 認証ステータス */
+.gcal-sync-status {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.gcal-sync-status.authorized {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.gcal-sync-status.not-authorized {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* カレンダーイベントのリンク色を無効化 */
+.markdown-preview-view a,
+.markdown-rendered a,
+a.external-link,
+a.internal-link {
+    color: var(--text-normal) !important;
+}
+
+.markdown-preview-view a:hover,
+.markdown-rendered a:hover,
+a.external-link:hover,
+a.internal-link:hover {
+    color: var(--text-normal) !important;
+    text-decoration: underline !important;
+}

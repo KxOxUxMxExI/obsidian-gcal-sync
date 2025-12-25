@@ -1,0 +1,10 @@
+{
+    "id": "obsidian-gcal-sync",
+    "name": "Gcal Sync for Obsidian",
+    "version": "1.0.0",
+    "minAppVersion": "0.15.0",
+    "description": "Google Calendarの予定をデイリーノートに自動挿入するプラグイン",
+    "author": "rikou",
+    "authorUrl": "",
+    "isDesktopOnly": false
+}
