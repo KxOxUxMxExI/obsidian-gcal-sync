@@ -53,10 +53,13 @@ Google CalendarとObsidianを同期するプラグインです。デイリーノ
 
 ```markdown
 ### Schedule
-- All-day event ※リボ調整
-- All-day event 古賀宙さんの誕生日
-- 19:00 - 20:00 ブラックサンタとしてランニング
-	- 場所: [つくば駅, 日本、〒305-0031 茨城県つくば市吾妻２丁目１２−８](https://www.google.com/maps/search/?api=1&query=...)
+- All-day event 誕生日
+- All-day event 記念日
+- 14:00 - 15:00 チームミーティング
+	- 場所: [会議室A, 東京都渋谷区...](https://www.google.com/maps/search/?api=1&query=...)
+	- リンク: [📹 Google Meetに参加](https://meet.google.com/xxx-xxxx-xxx)
+- 19:00 - 20:00 ランニング
+	- 場所: [代々木公園](https://www.google.com/maps/search/?api=1&query=...)
 ```
 
 ## ライセンス
