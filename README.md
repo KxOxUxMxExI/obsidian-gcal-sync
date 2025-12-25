@@ -65,7 +65,7 @@ MIT
 
 ## 作者
 
-rikou
+KxOxUxMxExI
 
 ## 貢献
 
