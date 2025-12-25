@@ -2,6 +2,7 @@ import { App, Plugin, PluginSettingTab, Setting, Notice, TFile, request } from '
 
 
 // 設定のインターフェース
+// 設定のインターフェース
 interface GcalSyncSettings {
     googleClientId: string;
     googleClientSecret: string;
@@ -11,6 +12,7 @@ interface GcalSyncSettings {
     autoRefresh: boolean;
     refreshInterval: number; // 秒単位
     calendarIds: string[]; // 表示するカレンダーIDのリスト
+    scheduleHeading: string; // 挿入先の見出し
 }
 
 // デフォルト設定
@@ -23,7 +25,18 @@ const DEFAULT_SETTINGS: GcalSyncSettings = {
     autoRefresh: true,
     refreshInterval: 60,
     calendarIds: ['primary'], // デフォルトはメインカレンダー
+    scheduleHeading: '### Schedule', // デフォルトの見出し
 };
+
+// ... (中略) ...
+
+
+
+// ... (中略) ...
+
+// 設定タブ
+
+
 
 // カレンダーイベントの型
 interface CalendarEvent {
@@ -386,30 +399,34 @@ export default class GcalSyncPlugin extends Plugin {
         console.log('アクティブファイル:', activeFile.path);
 
         const currentContent = await this.app.vault.read(activeFile);
-        console.log('現在のノート内容 (先頭200文字):', currentContent.slice(0, 200));
 
-        // ### Schedule 見出しを探す
-        const scheduleHeadingPattern = /^###\s+Schedule\s*$/m;
-        const scheduleMatch = currentContent.match(scheduleHeadingPattern);
+        // 設定された見出しを探す
+        const headingText = this.settings.scheduleHeading;
+        // 正規表現の特殊文字をエスケープ
+        const escapedHeading = headingText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // 行頭にある設定された見出しを探す
+        const headingRegex = new RegExp(`^${escapedHeading}\\s*$`, 'm');
+
+        const scheduleMatch = currentContent.match(headingRegex);
 
         if (!scheduleMatch || scheduleMatch.index === undefined) {
-            console.log('エラー: ### Schedule 見出しが見つかりません');
+            console.log(`エラー: ${headingText} 見出しが見つかりません`);
             return;
         }
 
         const scheduleHeadingEnd = scheduleMatch.index + scheduleMatch[0].length;
-        console.log('### Schedule 見出しの位置:', scheduleMatch.index);
+        console.log('見出しの位置:', scheduleMatch.index);
 
-        // Schedule 見出しの後ろから次の見出し（### で始まる行）までを抽出
+        // 見出しの後ろから次の見出し（# で始まる行）までを抽出
         const afterSchedule = currentContent.slice(scheduleHeadingEnd);
-        const nextHeadingMatch = afterSchedule.match(/^###\s+/m);
+        const nextHeadingMatch = afterSchedule.match(/^#+\s+/m);
         const searchEnd = nextHeadingMatch?.index !== undefined
             ? scheduleHeadingEnd + nextHeadingMatch.index
             : currentContent.length;
 
-        console.log('Schedule セクションの範囲:', { start: scheduleHeadingEnd, end: searchEnd });
+        console.log('セクションの範囲:', { start: scheduleHeadingEnd, end: searchEnd });
 
-        // Schedule セクション内でマーカーを探す
+        // セクション内でマーカーを探す
         const scheduleSection = currentContent.slice(scheduleHeadingEnd, searchEnd);
         const startMarker = '%%start%%';
         const endMarker = '%%end%%';
@@ -417,12 +434,10 @@ export default class GcalSyncPlugin extends Plugin {
         const startIdx = scheduleSection.indexOf(startMarker);
         const endIdx = scheduleSection.indexOf(endMarker);
 
-        console.log('Schedule セクション内のマーカー位置:', { startIdx, endIdx });
+        console.log('セクション内のマーカー位置:', { startIdx, endIdx });
 
         if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
-            console.log('エラー: Schedule セクション内にマーカーが見つからないか順序が不正');
-            console.log('startMarker が見つかった:', startIdx !== -1);
-            console.log('endMarker が見つかった:', endIdx !== -1);
+            console.log('エラー: セクション内にマーカーが見つからないか順序が不正');
             return;
         }
 
@@ -438,11 +453,6 @@ export default class GcalSyncPlugin extends Plugin {
 
         console.log('trimmed content:', trimmed);
         console.log('trimmed の長さ:', trimmed.length);
-
-        if (!trimmed) {
-            console.log('警告: content が空なので何もしない');
-            return;
-        }
 
         // イベントをそのまま挿入（マーカーは残す）
         const newContent = `${before}\n${trimmed}\n${after}`;
@@ -717,5 +727,51 @@ class GcalSyncSettingTab extends PluginSettingTab {
                         }
                     }));
         }
+
+        // 挿入先の見出し
+        new Setting(containerEl)
+            .setName('挿入先の見出し')
+            .setDesc('イベントを挿入するセクションの見出し。必須。 (例: ### Schedule, ## 今日の予定)')
+            .addText(text => text
+                .setPlaceholder('### Schedule')
+                .setValue(this.plugin.settings.scheduleHeading)
+                .onChange(async (value) => {
+                    this.plugin.settings.scheduleHeading = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // テンプレート設定サポート
+        containerEl.createEl('h3', { text: 'テンプレート設定サポート' });
+        const templateDiv = containerEl.createDiv({ cls: 'gcal-sync-template-helper' });
+        templateDiv.style.marginBottom = '20px';
+
+        // 1. フロントマター用
+        templateDiv.createEl('h4', { text: '① フロントマターの設定 (ファイルの先頭)' });
+        templateDiv.createEl('p', { text: 'ファイルの最上部にある --- で囲まれた領域（YAMLフロントマター）内に貼り付けてください。', style: 'font-size: 0.9em; opacity: 0.8; margin-bottom: 8px;' });
+
+        const copyFrontmatterBtn = templateDiv.createEl('button', { text: 'フロントマター用コードをコピー' });
+        copyFrontmatterBtn.onclick = () => {
+            const content = `<%* if (!tp.file.path(true).includes("Templates")) { %>cssclasses: gcal-sync<%* } %>`;
+            navigator.clipboard.writeText(content).then(() => {
+                new Notice('クリップボードにコピーしました！');
+            });
+        };
+
+        // 2. 本文用
+        templateDiv.createEl('h4', { text: '② スケジュール挿入箇所 (任意の場所)' });
+        templateDiv.createEl('p', { text: 'デイリーノート内でスケジュールを表示したい場所に貼り付けてください。', style: 'font-size: 0.9em; opacity: 0.8; margin-bottom: 8px;' });
+
+        const copyBodyBtn = templateDiv.createEl('button', { text: 'スケジュール挿入コードをコピー' });
+        copyBodyBtn.onclick = () => {
+            const heading = this.plugin.settings.scheduleHeading || '### Schedule';
+            const content = `${heading}
+<%* await app.commands.executeCommandById('obsidian-gcal-sync:insert-today-events'); '' %>
+%%start%%
+%%end%%`;
+
+            navigator.clipboard.writeText(content).then(() => {
+                new Notice('クリップボードにコピーしました！');
+            });
+        };
     }
 }

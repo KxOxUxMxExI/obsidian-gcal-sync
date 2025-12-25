@@ -47,16 +47,19 @@ a.internal-link:hover {
     text-decoration: underline !important;
 }
 
-/* gcal-sync クラスが指定されたノートのみコメントを非表示 */
-.gcal-sync .cm-comment {
-    display: none !important;
-}
-
-/* マーカー行全体を非表示 */
-.gcal-sync .cm-line:has(.cm-comment) {
+/* gcal-sync クラスが指定されたノートのみマーカー行を非表示 */
+/* %% を含む行全体を非表示にする */
+.gcal-sync .cm-line:has(.cm-comment-start) {
     display: none !important;
     height: 0 !important;
     line-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* 念のため、コメント自体も非表示 */
+.gcal-sync .cm-comment {
+    display: none !important;
 }
 
 /* 引用ブロックの左線を完全に透明 */

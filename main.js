@@ -31,8 +31,10 @@ var DEFAULT_SETTINGS = {
   enabledForDailyNotes: true,
   autoRefresh: true,
   refreshInterval: 60,
-  calendarIds: ["primary"]
+  calendarIds: ["primary"],
   // デフォルトはメインカレンダー
+  scheduleHeading: "### Schedule"
+  // デフォルトの見出し
 };
 var GcalSyncPlugin = class extends import_obsidian.Plugin {
   constructor() {
@@ -317,29 +319,28 @@ var GcalSyncPlugin = class extends import_obsidian.Plugin {
     }
     console.log("\u30A2\u30AF\u30C6\u30A3\u30D6\u30D5\u30A1\u30A4\u30EB:", activeFile.path);
     const currentContent = await this.app.vault.read(activeFile);
-    console.log("\u73FE\u5728\u306E\u30CE\u30FC\u30C8\u5185\u5BB9 (\u5148\u982D200\u6587\u5B57):", currentContent.slice(0, 200));
-    const scheduleHeadingPattern = /^###\s+Schedule\s*$/m;
-    const scheduleMatch = currentContent.match(scheduleHeadingPattern);
+    const headingText = this.settings.scheduleHeading;
+    const escapedHeading = headingText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const headingRegex = new RegExp(`^${escapedHeading}\\s*$`, "m");
+    const scheduleMatch = currentContent.match(headingRegex);
     if (!scheduleMatch || scheduleMatch.index === void 0) {
-      console.log("\u30A8\u30E9\u30FC: ### Schedule \u898B\u51FA\u3057\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093");
+      console.log(`\u30A8\u30E9\u30FC: ${headingText} \u898B\u51FA\u3057\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093`);
       return;
     }
     const scheduleHeadingEnd = scheduleMatch.index + scheduleMatch[0].length;
-    console.log("### Schedule \u898B\u51FA\u3057\u306E\u4F4D\u7F6E:", scheduleMatch.index);
+    console.log("\u898B\u51FA\u3057\u306E\u4F4D\u7F6E:", scheduleMatch.index);
     const afterSchedule = currentContent.slice(scheduleHeadingEnd);
-    const nextHeadingMatch = afterSchedule.match(/^###\s+/m);
+    const nextHeadingMatch = afterSchedule.match(/^#+\s+/m);
     const searchEnd = (nextHeadingMatch == null ? void 0 : nextHeadingMatch.index) !== void 0 ? scheduleHeadingEnd + nextHeadingMatch.index : currentContent.length;
-    console.log("Schedule \u30BB\u30AF\u30B7\u30E7\u30F3\u306E\u7BC4\u56F2:", { start: scheduleHeadingEnd, end: searchEnd });
+    console.log("\u30BB\u30AF\u30B7\u30E7\u30F3\u306E\u7BC4\u56F2:", { start: scheduleHeadingEnd, end: searchEnd });
     const scheduleSection = currentContent.slice(scheduleHeadingEnd, searchEnd);
     const startMarker = "%%start%%";
     const endMarker = "%%end%%";
     const startIdx = scheduleSection.indexOf(startMarker);
     const endIdx = scheduleSection.indexOf(endMarker);
-    console.log("Schedule \u30BB\u30AF\u30B7\u30E7\u30F3\u5185\u306E\u30DE\u30FC\u30AB\u30FC\u4F4D\u7F6E:", { startIdx, endIdx });
+    console.log("\u30BB\u30AF\u30B7\u30E7\u30F3\u5185\u306E\u30DE\u30FC\u30AB\u30FC\u4F4D\u7F6E:", { startIdx, endIdx });
     if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
-      console.log("\u30A8\u30E9\u30FC: Schedule \u30BB\u30AF\u30B7\u30E7\u30F3\u5185\u306B\u30DE\u30FC\u30AB\u30FC\u304C\u898B\u3064\u304B\u3089\u306A\u3044\u304B\u9806\u5E8F\u304C\u4E0D\u6B63");
-      console.log("startMarker \u304C\u898B\u3064\u304B\u3063\u305F:", startIdx !== -1);
-      console.log("endMarker \u304C\u898B\u3064\u304B\u3063\u305F:", endIdx !== -1);
+      console.log("\u30A8\u30E9\u30FC: \u30BB\u30AF\u30B7\u30E7\u30F3\u5185\u306B\u30DE\u30FC\u30AB\u30FC\u304C\u898B\u3064\u304B\u3089\u306A\u3044\u304B\u9806\u5E8F\u304C\u4E0D\u6B63");
       return;
     }
     const absoluteStartIdx = scheduleHeadingEnd + startIdx;
@@ -351,10 +352,6 @@ var GcalSyncPlugin = class extends import_obsidian.Plugin {
     const trimmed = content.trim();
     console.log("trimmed content:", trimmed);
     console.log("trimmed \u306E\u9577\u3055:", trimmed.length);
-    if (!trimmed) {
-      console.log("\u8B66\u544A: content \u304C\u7A7A\u306A\u306E\u3067\u4F55\u3082\u3057\u306A\u3044");
-      return;
-    }
     const newContent = `${before}
 ${trimmed}
 ${after}`;
@@ -525,5 +522,34 @@ var GcalSyncSettingTab = class extends import_obsidian.PluginSettingTab {
         }
       }));
     }
+    new import_obsidian.Setting(containerEl).setName("\u633F\u5165\u5148\u306E\u898B\u51FA\u3057").setDesc("\u30A4\u30D9\u30F3\u30C8\u3092\u633F\u5165\u3059\u308B\u30BB\u30AF\u30B7\u30E7\u30F3\u306E\u898B\u51FA\u3057\u3002\u5FC5\u9808\u3002 (\u4F8B: ### Schedule, ## \u4ECA\u65E5\u306E\u4E88\u5B9A)").addText((text) => text.setPlaceholder("### Schedule").setValue(this.plugin.settings.scheduleHeading).onChange(async (value) => {
+      this.plugin.settings.scheduleHeading = value;
+      await this.plugin.saveSettings();
+    }));
+    containerEl.createEl("h3", { text: "\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8\u8A2D\u5B9A\u30B5\u30DD\u30FC\u30C8" });
+    const templateDiv = containerEl.createDiv({ cls: "gcal-sync-template-helper" });
+    templateDiv.style.marginBottom = "20px";
+    templateDiv.createEl("h4", { text: "\u2460 \u30D5\u30ED\u30F3\u30C8\u30DE\u30BF\u30FC\u306E\u8A2D\u5B9A (\u30D5\u30A1\u30A4\u30EB\u306E\u5148\u982D)" });
+    templateDiv.createEl("p", { text: "\u30D5\u30A1\u30A4\u30EB\u306E\u6700\u4E0A\u90E8\u306B\u3042\u308B --- \u3067\u56F2\u307E\u308C\u305F\u9818\u57DF\uFF08YAML\u30D5\u30ED\u30F3\u30C8\u30DE\u30BF\u30FC\uFF09\u5185\u306B\u8CBC\u308A\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002", style: "font-size: 0.9em; opacity: 0.8; margin-bottom: 8px;" });
+    const copyFrontmatterBtn = templateDiv.createEl("button", { text: "\u30D5\u30ED\u30F3\u30C8\u30DE\u30BF\u30FC\u7528\u30B3\u30FC\u30C9\u3092\u30B3\u30D4\u30FC" });
+    copyFrontmatterBtn.onclick = () => {
+      const content = `<%* if (!tp.file.path(true).includes("Templates")) { %>cssclasses: gcal-sync<%* } %>`;
+      navigator.clipboard.writeText(content).then(() => {
+        new import_obsidian.Notice("\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01");
+      });
+    };
+    templateDiv.createEl("h4", { text: "\u2461 \u30B9\u30B1\u30B8\u30E5\u30FC\u30EB\u633F\u5165\u7B87\u6240 (\u4EFB\u610F\u306E\u5834\u6240)" });
+    templateDiv.createEl("p", { text: "\u30C7\u30A4\u30EA\u30FC\u30CE\u30FC\u30C8\u5185\u3067\u30B9\u30B1\u30B8\u30E5\u30FC\u30EB\u3092\u8868\u793A\u3057\u305F\u3044\u5834\u6240\u306B\u8CBC\u308A\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002", style: "font-size: 0.9em; opacity: 0.8; margin-bottom: 8px;" });
+    const copyBodyBtn = templateDiv.createEl("button", { text: "\u30B9\u30B1\u30B8\u30E5\u30FC\u30EB\u633F\u5165\u30B3\u30FC\u30C9\u3092\u30B3\u30D4\u30FC" });
+    copyBodyBtn.onclick = () => {
+      const heading = this.plugin.settings.scheduleHeading || "### Schedule";
+      const content = `${heading}
+<%* await app.commands.executeCommandById('obsidian-gcal-sync:insert-today-events'); '' %>
+%%start%%
+%%end%%`;
+      navigator.clipboard.writeText(content).then(() => {
+        new import_obsidian.Notice("\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01");
+      });
+    };
   }
 };
